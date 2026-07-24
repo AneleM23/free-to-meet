@@ -1,0 +1,491 @@
+# free-to-meet
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Free to Meet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg: #12151A;
+    --panel: #1A1F26;
+    --panel-edge: #262D37;
+    --ink: #EDEFF2;
+    --dim: #838C99;
+    --busy: #FF6B5B;
+    --free: #57E0AE;
+    --unsure: #FFC163;
+    --unset: #333B45;
+    --accent: #7C9CFF;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display:flex;
+    justify-content:center;
+    padding: 24px 14px 60px;
+  }
+  .app{ width:100%; max-width:560px; }
+  .brand{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom: 22px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--panel-edge);
+  }
+  .brand h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.5px;
+  }
+  .brand h1 span{ color: var(--accent); }
+  .brand .clock{
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* --- Setup screen --- */
+  .setup{ display:flex; flex-direction:column; gap:14px; }
+  .setup p.lead{ color:var(--dim); font-size:13px; line-height:1.6; margin-bottom:6px; }
+  .slot{
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 10px;
+    padding: 16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .slot .tag{ font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1.5px; }
+  .slot .name{ font-family:'Space Grotesk',sans-serif; font-size:18px; }
+  .slot input{
+    background: var(--bg);
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
+    color: var(--ink);
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 14px;
+  }
+  button{
+    font-family: 'Space Grotesk', sans-serif;
+    cursor:pointer;
+    border:none;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .btn-primary{ background: var(--accent); color: #10131A; }
+  .btn-primary:disabled{ background: var(--panel-edge); color:var(--dim); cursor:not-allowed; }
+  .btn-ghost{ background: transparent; border:1px solid var(--panel-edge); color:var(--ink); }
+
+  /* --- Main screen --- */
+  .who{
+    display:flex; align-items:center; gap:8px;
+    font-size:12px; color:var(--dim); margin-bottom:16px;
+  }
+  .who b{ color: var(--ink); }
+  .switch-btn{
+    margin-left:auto; background:none; border:none; color:var(--dim);
+    text-decoration:underline; font-size:11px; font-family:inherit; padding:4px;
+  }
+
+  .daytabs{
+    display:grid;
+    grid-template-columns: repeat(7,1fr);
+    gap:6px;
+    margin-bottom: 16px;
+  }
+  .daytab{
+    background: var(--panel);
+    border:1px solid var(--panel-edge);
+    border-radius: 8px;
+    padding: 8px 2px;
+    text-align:center;
+    color: var(--dim);
+    cursor:pointer;
+    font-family:'Space Grotesk',sans-serif;
+  }
+  .daytab .d{ font-size:11px; letter-spacing:0.5px; }
+  .daytab .n{ font-size:15px; font-weight:700; margin-top:2px; color: var(--ink); }
+  .daytab.active{ border-color: var(--accent); background: rgba(124,156,255,0.1); }
+  .daytab.active .d{ color: var(--accent); }
+  .daytab .dot{
+    width:5px;height:5px;border-radius:50%; margin:4px auto 0;
+    background: var(--unset);
+  }
+  .daytab .dot.hasmatch{ background: var(--free); box-shadow: 0 0 6px var(--free); }
+
+  .legend{
+    display:flex; gap:16px; margin-bottom:14px; font-size:11px; color:var(--dim);
+    flex-wrap:wrap;
+  }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend i{ width:9px; height:9px; border-radius:2px; display:inline-block; }
+
+  .board{
+    background: var(--panel);
+    border:1px solid var(--panel-edge);
+    border-radius: 10px;
+    overflow:hidden;
+  }
+  .row{
+    display:grid;
+    grid-template-columns: 56px 1fr 34px;
+    align-items:center;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--panel-edge);
+    transition: background 0.15s;
+  }
+  .row:last-child{ border-bottom:none; }
+  .row.match{ background: rgba(87,224,174,0.08); }
+  .row .hr{ font-size:12px; color:var(--dim); letter-spacing:0.5px; }
+  .row.match .hr{ color: var(--free); }
+  .cellwrap{ display:flex; gap:6px; }
+  .cell{
+    flex:1;
+    display:flex; flex-direction:column; gap:3px;
+  }
+  .cell .lbl{ font-size:8px; letter-spacing:1px; color: var(--dim); text-transform:uppercase; }
+  .segbtns{ display:flex; gap:3px; }
+  .seg{
+    flex:1;
+    height:22px;
+    border-radius:4px;
+    border: 1px solid var(--panel-edge);
+    background: transparent;
+    cursor:pointer;
+    font-size: 9px;
+    color: var(--dim);
+    font-family: inherit;
+  }
+  .seg[data-s="busy"].active{ background: var(--busy); border-color:var(--busy); color:#1a0d0a; }
+  .seg[data-s="free"].active{ background: var(--free); border-color:var(--free); color:#08211a; }
+  .seg[data-s="unsure"].active{ background: var(--unsure); border-color:var(--unsure); color:#241705; }
+  .otherstatus{
+    width:34px; height:22px; border-radius:4px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:9px; font-weight:700;
+    background: var(--unset); color: var(--dim);
+  }
+  .otherstatus.busy{ background: rgba(255,107,91,0.18); color: var(--busy); }
+  .otherstatus.free{ background: rgba(87,224,174,0.18); color: var(--free); }
+  .otherstatus.unsure{ background: rgba(255,193,99,0.18); color: var(--unsure); }
+  .matchflag{ font-size:14px; text-align:center; }
+
+  .footer-actions{
+    display:flex; justify-content:space-between; margin-top:16px;
+  }
+  .footer-actions button{ font-size:11px; padding:8px 12px; }
+
+  .hidden{ display:none !important; }
+  .loading{ color:var(--dim); font-size:13px; padding: 40px 0; text-align:center; }
+
+  @media (max-width:400px){
+    .row{ grid-template-columns: 44px 1fr 28px; padding:6px 8px; }
+    .otherstatus{ width:28px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="brand">
+    <h1>Free<span>2</span>Meet</h1>
+    <div class="clock" id="clockLine">SETUP</div>
+  </div>
+
+  <div id="loading" class="loading">loading schedule…</div>
+
+  <!-- SETUP SCREEN -->
+  <div id="setupScreen" class="setup hidden">
+    <p class="lead">Two slots, one shared board. Claim a slot below — your phone will remember it.</p>
+    <div class="slot" id="slotP1"></div>
+    <div class="slot" id="slotP2"></div>
+  </div>
+
+  <!-- MAIN SCREEN -->
+  <div id="mainScreen" class="hidden">
+    <div class="who">
+      You're <b id="meName"></b> · scheduling with <b id="themName"></b>
+      <button class="switch-btn" id="switchIdentity">not you?</button>
+    </div>
+
+    <div class="daytabs" id="dayTabs"></div>
+
+    <div class="legend">
+      <span><i style="background:var(--busy)"></i>Busy</span>
+      <span><i style="background:var(--free)"></i>Free</span>
+      <span><i style="background:var(--unsure)"></i>Unsure</span>
+      <span><i style="background:var(--free);box-shadow:0 0 4px var(--free)"></i>Match = free to meet</span>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="footer-actions">
+      <button class="btn-ghost" id="clearDayBtn">clear my hours — today's tab</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ======================================================
+   PASTE YOUR FIREBASE CONFIG BELOW — replace the object.
+   You get this from Firebase Console → Project settings →
+   General → Your apps → the web app (</>) you registered.
+   ====================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAtIIj2QLNolwCRqIaaVySKiHOsGZBat5k",
+  authDomain: "free2meet-866ee.firebaseapp.com",
+  projectId: "free2meet-866ee",
+  storageBucket: "free2meet-866ee.firebasestorage.app",
+  messagingSenderId: "204034377176",
+  appId: "1:204034377176:web:53011ae20cbf1b42485ead"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const docRef = db.collection('freetomeet').doc('shared');
+
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const HOURS = Array.from({length:24}, (_,i)=>i);
+const STATES = ['busy','free','unsure']; // unset is the implicit 4th
+
+function hourLabel(h){
+  return String(h).padStart(2,'0') + ':00';
+}
+
+function emptyDay(){
+  return HOURS.map(()=>({p1:null, p2:null}));
+}
+
+let DATA = null; // { profiles:{p1,p2}, days:{Monday:[...24], ...} }
+let ME = null;   // 'p1' | 'p2'
+let activeDay = DAYS[new Date().getDay() === 0 ? 6 : new Date().getDay()-1];
+
+async function loadIdentity(){
+  return localStorage.getItem('f2m_identity');
+}
+async function saveIdentity(slot){
+  ME = slot;
+  localStorage.setItem('f2m_identity', slot);
+}
+
+function freshData(){
+  const fresh = { profiles:{p1:null,p2:null}, days:{} };
+  DAYS.forEach(d=> fresh.days[d] = emptyDay());
+  return fresh;
+}
+
+async function loadData(){
+  try{
+    const snap = await docRef.get();
+    if(snap.exists){
+      const parsed = snap.data();
+      DAYS.forEach(d=>{ if(!parsed.days[d]) parsed.days[d] = emptyDay(); });
+      return parsed;
+    }
+  }catch(e){ console.error('load failed', e); }
+  return freshData();
+}
+
+async function saveData(){
+  try{ await docRef.set(DATA); }
+  catch(e){ console.error('save failed', e); alert('Could not sync — check your internet connection.'); }
+}
+
+// live updates from the other person, in real time
+function listenForChanges(){
+  docRef.onSnapshot(snap=>{
+    if(!snap.exists) return;
+    const incoming = snap.data();
+    DAYS.forEach(d=>{ if(!incoming.days[d]) incoming.days[d] = emptyDay(); });
+    DATA = incoming;
+    if(ME && DATA.profiles[ME]){
+      renderMain();
+    } else if(document.getElementById('setupScreen')){
+      renderSetup();
+    }
+  }, err=> console.error('listener error', err));
+}
+
+function otherSlot(){ return ME === 'p1' ? 'p2' : 'p1'; }
+
+function renderSetup(){
+  document.getElementById('setupScreen').classList.remove('hidden');
+  document.getElementById('mainScreen').classList.add('hidden');
+
+  ['p1','p2'].forEach(slot=>{
+    const el = document.getElementById(slot === 'p1' ? 'slotP1' : 'slotP2');
+    const name = DATA.profiles[slot];
+    el.innerHTML = '';
+    const tag = document.createElement('div');
+    tag.className = 'tag'; tag.textContent = 'slot ' + (slot === 'p1' ? '1' : '2');
+    el.appendChild(tag);
+
+    if(name){
+      const n = document.createElement('div');
+      n.className = 'name'; n.textContent = name;
+      el.appendChild(n);
+      const btn = document.createElement('button');
+      btn.className = 'btn-primary';
+      btn.textContent = "Continue as " + name;
+      btn.onclick = async ()=>{ await saveIdentity(slot); boot(); };
+      el.appendChild(btn);
+    } else {
+      const input = document.createElement('input');
+      input.placeholder = 'Type your name';
+      input.maxLength = 20;
+      el.appendChild(input);
+      const btn = document.createElement('button');
+      btn.className = 'btn-primary';
+      btn.textContent = 'Claim this slot';
+      btn.onclick = async ()=>{
+        const v = input.value.trim();
+        if(!v) return;
+        DATA.profiles[slot] = v;
+        await saveData();
+        await saveIdentity(slot);
+        boot();
+      };
+      el.appendChild(btn);
+    }
+  });
+}
+
+function dayMatchCount(day){
+  return DATA.days[day].filter(c => c.p1 === 'free' && c.p2 === 'free').length;
+}
+
+function renderDayTabs(){
+  const wrap = document.getElementById('dayTabs');
+  wrap.innerHTML = '';
+  DAYS.forEach(d=>{
+    const tab = document.createElement('div');
+    tab.className = 'daytab' + (d === activeDay ? ' active' : '');
+    const matches = dayMatchCount(d);
+    tab.innerHTML = `<div class="d">${d.slice(0,3).toUpperCase()}</div>
+                      <div class="n">${d==='Wednesday'?'W':d[0]}</div>
+                      <div class="dot ${matches>0?'hasmatch':''}"></div>`;
+    tab.onclick = ()=>{ activeDay = d; renderDayTabs(); renderBoard(); };
+    wrap.appendChild(tab);
+  });
+}
+
+function cycleStatus(current){
+  if(current === null) return 'busy';
+  const idx = STATES.indexOf(current);
+  if(idx === STATES.length - 1) return null;
+  return STATES[idx+1];
+}
+
+function renderBoard(){
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  const me = ME, them = otherSlot();
+
+  HOURS.forEach(h=>{
+    const cell = DATA.days[activeDay][h];
+    const isMatch = cell.p1 === 'free' && cell.p2 === 'free';
+
+    const row = document.createElement('div');
+    row.className = 'row' + (isMatch ? ' match' : '');
+
+    const hr = document.createElement('div');
+    hr.className = 'hr';
+    hr.textContent = hourLabel(h);
+    row.appendChild(hr);
+
+    // my toggle group
+    const cellWrap = document.createElement('div');
+    cellWrap.className = 'cellwrap';
+
+    const myCell = document.createElement('div');
+    myCell.className = 'cell';
+    const segbtns = document.createElement('div');
+    segbtns.className = 'segbtns';
+    STATES.forEach(s=>{
+      const b = document.createElement('button');
+      b.className = 'seg' + (cell[me] === s ? ' active' : '');
+      b.dataset.s = s;
+      b.textContent = s[0].toUpperCase();
+      b.onclick = async ()=>{
+        cell[me] = cell[me] === s ? null : s;
+        await saveData();
+        renderDayTabs();
+        renderBoard();
+      };
+      segbtns.appendChild(b);
+    });
+    myCell.appendChild(segbtns);
+    cellWrap.appendChild(myCell);
+    row.appendChild(cellWrap);
+
+    // their status (read-only)
+    const other = document.createElement('div');
+    other.className = 'otherstatus' + (cell[them] ? ' ' + cell[them] : '');
+    other.textContent = cell[them] ? cell[them][0].toUpperCase() : '·';
+    row.appendChild(other);
+
+    board.appendChild(row);
+  });
+}
+
+function renderMain(){
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('mainScreen').classList.remove('hidden');
+  document.getElementById('meName').textContent = DATA.profiles[ME];
+  document.getElementById('themName').textContent = DATA.profiles[otherSlot()] || 'them (not joined yet)';
+  document.getElementById('clockLine').textContent = DATA.profiles[ME];
+  renderDayTabs();
+  renderBoard();
+}
+
+document.getElementById('switchIdentity').addEventListener('click', async ()=>{
+  ME = null;
+  localStorage.removeItem('f2m_identity');
+  renderSetup();
+});
+
+document.getElementById('clearDayBtn').addEventListener('click', async ()=>{
+  DATA.days[activeDay].forEach(c => c[ME] = null);
+  await saveData();
+  renderDayTabs();
+  renderBoard();
+});
+
+async function boot(){
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('mainScreen').classList.add('hidden');
+
+  ME = await loadIdentity();
+  DATA = await loadData();
+
+  document.getElementById('loading').classList.add('hidden');
+
+  if(!ME || !DATA.profiles[ME]){
+    renderSetup();
+  } else {
+    renderMain();
+  }
+
+  listenForChanges();
+}
+
+boot();
+</script>
+</body>
+</html>
